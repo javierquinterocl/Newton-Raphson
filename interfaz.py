@@ -1,4 +1,4 @@
-import sys
+import sys 
 import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -8,8 +8,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QDoubleValidator
 from PyQt6.QtCore import Qt, QEvent
 
-# Importamos sympy para manejar funciones simbólicas
-from sympy import symbols, sympify, diff, lambdify, sin, cos, exp, sqrt
+# Importamos Sympy para manejar funciones simbólicas
+from sympy import symbols, diff, lambdify, sin, cos, exp, sqrt, E
+
+# Importamos el parser avanzado de Sympy
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application, convert_xor
+
+# Importamos matplotlib para la gráfica
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 class NewtonRaphsonApp(QMainWindow):
     def __init__(self):
@@ -114,7 +121,6 @@ class NewtonRaphsonApp(QMainWindow):
         # Función para manejar la pulsación de botones
         def on_button_clicked(text):
             widget = self.current_input if self.current_input is not None else self.function_input
-
             if text == "CE":
                 widget.clear()
             elif text == "C":
@@ -181,33 +187,24 @@ class NewtonRaphsonApp(QMainWindow):
         # Conectar el botón de calcular a la función que ejecuta Newton-Raphson
         self.calculate_button.clicked.connect(self.calcular)
 
-        # Agrega el contenedor de la calculadora al panel izquierdo, centrado horizontalmente
+        # Agregar el contenedor de la calculadora al panel izquierdo, centrado horizontalmente
         left_layout.addWidget(calc_container, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Agregar stretch inferior para centrar verticalmente el contenido
         left_layout.addStretch(1)
 
         # ---------------------------
-        # Panel DERECHO (para tabla de resultados)
+        # Panel DERECHO (Tabla y Gráfica verticalmente apiladas)
         # ---------------------------
-        self.right_frame = QFrame()
-        self.right_frame.setStyleSheet("background-color: white;")
-        self.right_layout = QVBoxLayout(self.right_frame)
-        self.right_layout.setContentsMargins(20, 20, 20, 20)
+        right_frame = QFrame()
+        right_frame.setStyleSheet("background-color: white;")
+        right_layout = QVBoxLayout(right_frame)
+        right_layout.setContentsMargins(20, 20, 20, 20)
 
-        # Título para el panel derecho
-        results_title = QLabel("Resultados del Método Newton-Raphson")
-        results_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        results_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        results_title.setStyleSheet("color: black; margin-bottom: 20px;")
-        self.right_layout.addWidget(results_title)
-
-        # Crear tabla vacía desde el inicio
+        # Tabla de resultados
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(5)
         self.tabla.setHorizontalHeaderLabels(["Iteración", "xi", "f(xi)", "f'(xi)", "Error"])
-        
-        # Configurar la tabla para que se ajuste al contenido
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tabla.verticalHeader().setVisible(False)
         self.tabla.setAlternatingRowColors(True)
@@ -232,14 +229,18 @@ class NewtonRaphsonApp(QMainWindow):
                 padding: 4px;
             }
         """)
-        
-        # Agregar la tabla al layout del panel derecho
-        self.right_layout.addWidget(self.tabla)
+        right_layout.addWidget(self.tabla, stretch=1)
 
-        # Agregar ambos paneles al splitter
+        # Gráfica de resultados
+        self.figure = Figure(figsize=(5, 4))
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumHeight(300)
+        right_layout.addWidget(self.canvas, stretch=1)
+
+        # Agregar ambos paneles al splitter principal
         splitter.addWidget(left_frame)
-        splitter.addWidget(self.right_frame)
-        splitter.setSizes([700, 700])  # Valores iniciales, ajustables por el usuario
+        splitter.addWidget(right_frame)
+        splitter.setSizes([700, 700])
 
         # Layout principal del widget central
         main_layout = QHBoxLayout(central_widget)
@@ -265,33 +266,47 @@ class NewtonRaphsonApp(QMainWindow):
 
         try:
             x0 = float(x0_str)
-            tol = float(tol_str)  # Tolerancia como porcentaje
+            tol = float(tol_str)  # Tolerancia en porcentaje
         except ValueError:
             QMessageBox.warning(self, "Error", "x0 y tolerancia deben ser números.")
             return
 
-        # Define la variable simbólica y procesa la función con sympy
+        # 1) Definir la variable simbólica x
         x = symbols('x')
 
-        # Reemplazar operadores y funciones para que Sympy los reconozca
-        func_str = func_str.replace('e', 'exp(1)')
-        func_str = func_str.replace('^', '**')
+        # 2) Configurar el parser de Sympy para manejar multiplicación implícita y ^ como potencia
+        transformations = (standard_transformations + (implicit_multiplication_application, convert_xor))
+        
+        # 3) Reemplazar '√' por 'sqrt' (opcional, por si el usuario escribe √x)
         func_str = func_str.replace('√', 'sqrt')
-       
+
+        # 4) Realizar el parseo con un diccionario local que reconozca:
+        #    - e como E (la constante de Euler en Sympy)
+        #    - sin, cos, exp, sqrt, etc.
+        local_dict = {
+            'x': x,
+            'e': E,
+            'E': E,
+            'sin': sin,
+            'cos': cos,
+            'exp': exp,
+            'sqrt': sqrt
+        }
+
         try:
-            f_sym = sympify(func_str)
+            f_sym = parse_expr(func_str, transformations=transformations, local_dict=local_dict)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error al interpretar f(x): {e}")
             return
 
-        # Calcula la derivada de f(x)
+        # 5) Derivar simbólicamente
         try:
             fprime_sym = diff(f_sym, x)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error al calcular la derivada: {e}")
             return
 
-        # Genera funciones numéricas usando lambdify
+        # 6) Crear funciones numéricas
         try:
             f_num = lambdify(x, f_sym, modules=['math'])
             fprime_num = lambdify(x, fprime_sym, modules=['math'])
@@ -299,59 +314,52 @@ class NewtonRaphsonApp(QMainWindow):
             QMessageBox.warning(self, "Error", f"Error al convertir la función: {e}")
             return
 
-        # Realiza las iteraciones del método de Newton-Raphson
+        # 7) Método Newton-Raphson
         max_iter = 50  # Límite de 50 iteraciones
         iteraciones = []
         xi = x0
-        error_rel_porcentaje = float('inf')  # Error relativo inicial en porcentaje
-        i = 0  # Empezamos desde 0 para incluir el valor inicial
+        error_rel_porcentaje = float('inf')
+        i = 0
 
-        # Agregar el valor inicial (antes de la primera iteración)
+        # Evaluación inicial
         try:
             fxi = f_num(xi)
             fprime_xi = fprime_num(xi)
-            iteraciones.append((i, xi, fxi, fprime_xi, float('inf')))  # Error inicial es infinito
+            iteraciones.append((i, xi, fxi, fprime_xi, float('inf')))
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error en la evaluación inicial: {e}")
             return
 
-        i = 1  # Ahora empezamos las iteraciones desde 1
+        i = 1
         
-        # Bucle principal del método de Newton-Raphson
         while error_rel_porcentaje > tol and i <= max_iter:
             try:
                 fxi = f_num(xi)
                 fprime_xi = fprime_num(xi)
                 
-                # Evitar división por cero
                 if abs(fprime_xi) < 1e-10:
                     QMessageBox.warning(self, "Error", "La derivada es casi cero; no se puede continuar.")
                     return
                 
-                # Calcular el siguiente valor de x
                 xi_new = xi - fxi / fprime_xi
                 
-                # Calcular el error relativo porcentual: |((x_actual - x_anterior) / x_actual)| × 100
-                if abs(xi_new) < 1e-10:  # Evitar división por cero
-                    error_rel_porcentaje = abs(xi_new - xi) * 100  # Usar error absoluto si xi_new es casi cero
+                if abs(xi_new) < 1e-10:
+                    # Evitar división por cero en el denominador del error relativo
+                    error_rel_porcentaje = abs(xi_new - xi) * 100
                 else:
-                    error_rel_porcentaje = abs((xi_new - xi) / xi_new) * 100  # Error relativo en porcentaje
+                    error_rel_porcentaje = abs((xi_new - xi) / xi_new) * 100
                 
-                # Calcular f(xi_new) y f'(xi_new) para la tabla
                 fxi_new = f_num(xi_new)
                 fprime_xi_new = fprime_num(xi_new)
                 
-                # Guardar los resultados de esta iteración
                 iteraciones.append((i, xi_new, fxi_new, fprime_xi_new, error_rel_porcentaje))
                 
                 print(f"Iteración {i}: xi={xi_new}, f(xi)={fxi_new}, f'(xi)={fprime_xi_new}, error={error_rel_porcentaje}%")
                 
-                # Verificar si hemos alcanzado la tolerancia
                 if error_rel_porcentaje <= tol:
                     print(f"Convergencia alcanzada: Error {error_rel_porcentaje}% <= Tolerancia {tol}%")
                     break
                 
-                # Actualizar xi para la siguiente iteración
                 xi = xi_new
                 i += 1
                 
@@ -359,44 +367,48 @@ class NewtonRaphsonApp(QMainWindow):
                 QMessageBox.warning(self, "Error", f"Error en la iteración {i}: {e}")
                 return
 
-        # Actualiza la tabla con los resultados
+        # 8) Mostrar resultados en la tabla
         self.mostrar_resultados(iteraciones)
+        # 9) Graficar resultados
+        self.graficar_resultados(iteraciones)
 
     def mostrar_resultados(self, iteraciones):
-        # Limpiar la tabla existente
         self.tabla.clearContents()
         self.tabla.setRowCount(len(iteraciones))
-        
-        print(f"Mostrando {len(iteraciones)} filas en la tabla")
-        
-        # Rellena la tabla con los datos
         for row, data in enumerate(iteraciones):
-            print(f"Procesando fila {row}: {data}")
-            
             for col, value in enumerate(data):
-                # Formatear los números para que sean legibles
-                if col == 0:  # Iteración (entero)
+                if col == 0:
                     text = str(int(value))
-                elif col == 4 and row == 0:  # Error en la primera fila (infinito)
+                elif col == 4 and row == 0:
                     text = "---"
-                else:  # Valores numéricos (float)
+                else:
                     text = f"{value:.4f}"
-                
-                # Crear el item y establecer el texto
                 item = QTableWidgetItem(text)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                
-                # Establecer color de texto explícitamente
-                item.setForeground(QColor(0, 0, 0))  # Negro
-                
-                # Insertar el item en la tabla
+                item.setForeground(QColor(0, 0, 0))
                 self.tabla.setItem(row, col, item)
-                
-                print(f"Item insertado en ({row}, {col}): {text}")
-        
-        # Forzar actualización de la tabla
         self.tabla.update()
         QApplication.processEvents()
+
+    def graficar_resultados(self, iteraciones):
+        # Se usará xi como eje x y se graficarán f(xi) y f'(xi)
+        xi_vals = [it[1] for it in iteraciones]
+        fxi_vals = [it[2] for it in iteraciones]
+        fprime_vals = [it[3] for it in iteraciones]
+        
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        
+        ax.plot(xi_vals, fxi_vals, marker='o', linestyle='-', label='$f(x_i)$')
+        ax.plot(xi_vals, fprime_vals, marker='s', linestyle='--', label="$f'(x_i)$")
+        
+        ax.set_xlabel("$x_i$")
+        ax.set_ylabel("Valor")
+        ax.set_title("Gráfica de $f(x_i)$ y $f'(x_i)$ vs $x_i$")
+        ax.legend()
+        ax.grid(True)
+        
+        self.canvas.draw()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
