@@ -1,3 +1,4 @@
+#pip install matplotlib sympy PyQt6
 import sys  
 import math
 from PyQt6.QtWidgets import (
@@ -8,19 +9,19 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QDoubleValidator
 from PyQt6.QtCore import Qt, QEvent
 
-# Importamos Sympy para manejar funciones simbólicas
+# Se importan herramientas de Sympy para trabajar con funciones simbólicas
 from sympy import symbols, diff, lambdify, sin, cos, exp, sqrt, E, tan, log
-# Importamos el parser avanzado de Sympy
+# Se importa el parser avanzado de Sympy para interpretar las funciones de entrada
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application, convert_xor
-# Importamos matplotlib para la gráfica
+# Se importan herramientas de matplotlib para realizar la gráfica
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 class CalculatorPage(QWidget):
     def __init__(self, main_window):
         super().__init__()
-        self.main_window = main_window  # Referencia a la ventana principal para navegación
-        self.current_input = None  # Para llevar seguimiento del input activo
+        self.main_window = main_window  
+        self.current_input = None  
         self.initUI()
 
     def initUI(self):
@@ -29,7 +30,9 @@ class CalculatorPage(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet("QSplitter::handle { background-color: gray; width: 2px; }")
 
-        # Panel Izquierdo
+        # ================
+        # PANEL IZQUIERDO
+        # ================
         left_frame = QFrame()
         left_frame.setStyleSheet("background-color: white;")
         left_layout = QVBoxLayout(left_frame)
@@ -103,7 +106,7 @@ class CalculatorPage(QWidget):
         aplicar_sombra(self.tolerance_input)
         calc_layout.addWidget(self.tolerance_input)
 
-        # Teclado
+        # Teclado Virtual
         def on_button_clicked(text):
             widget = self.current_input if self.current_input else self.function_input
             if text == "CE":
@@ -118,17 +121,20 @@ class CalculatorPage(QWidget):
                 widget.setText(new_text)
                 widget.setCursorPosition(cursor_pos + len(text))
 
+        # Se define una lista de listas para ubicar cada botón en el grid
         buttons = [
-            ["CE", "C", "(", ")", "e"],
-            ["7",  "8",  "9",  "+", "^"],
-            ["4",  "5",  "6",  "/", "√"],
-            ["1",  "2",  "3",  "*", "sin"],
-            ["0",  ",",  "x",  "-", "cos"],
-            ["",   "",   "",   "tan", "ln"]
+            ["CE", "C",  "(",  ")",    "e"  ],
+            ["7",  "8",  "9",  "+",    "^"  ],
+            ["4",  "5",  "6",  "/",    "√"  ],
+            ["1",  "2",  "3",  "*",    "sin"],
+            ["0",  ",",  "x",  "-",    "cos"],
+            ["",   "",   "",   "tan",  "ln" ]
         ]
+
         grid_layout = QGridLayout()
         grid_layout.setHorizontalSpacing(15)
         grid_layout.setVerticalSpacing(15)
+
         for row, button_row in enumerate(buttons):
             for col, text in enumerate(button_row):
                 if text:
@@ -147,11 +153,15 @@ class CalculatorPage(QWidget):
                         "}"
                     )
                     button.clicked.connect(lambda _, t=text: on_button_clicked(t))
+                    grid_layout.addWidget(button, row, col)
                 else:
-                    button = QWidget()
-                grid_layout.addWidget(button, row, col)
+                    # Espacio vacío (se podría dejar un QWidget o un QLabel en blanco)
+                    space_widget = QWidget()
+                    grid_layout.addWidget(space_widget, row, col)
+
         calc_layout.addLayout(grid_layout)
 
+        # Botón para Calcular
         self.calculate_button = QPushButton("Calcular")
         self.calculate_button.setFont(QFont("Arial", 16))
         self.calculate_button.setStyleSheet(
@@ -170,6 +180,7 @@ class CalculatorPage(QWidget):
         calc_layout.addWidget(self.calculate_button)
         self.calculate_button.clicked.connect(self.calcular)
 
+        # Botón Manual
         self.manual_button = QPushButton("Manual")
         self.manual_button.setFont(QFont("Arial", 16))
         self.manual_button.setStyleSheet(
@@ -188,14 +199,43 @@ class CalculatorPage(QWidget):
         calc_layout.addWidget(self.manual_button)
         self.manual_button.clicked.connect(self.mostrar_manual)
 
+        # ================
+        # BOTÓN "Borrar Todo" EN EL GRID (debajo de 0 y x)
+        # ================
+        self.clear_all_button = QPushButton("Borrar Todo")
+        self.clear_all_button.setFont(QFont("Arial", 16))
+        self.clear_all_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #dc3545;"  # Rojo
+            "  color: white;"
+            "  border-radius: 10px;"
+            "  padding: 10px;"
+            "  font-weight: bold;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #c82333;"
+            "}"
+        )
+        aplicar_sombra(self.clear_all_button)
+        # Se ubica en la fila 5, columna 0, abarcando 3 columnas para que ocupe el espacio vacío
+        grid_layout.addWidget(self.clear_all_button, 5, 0, 1, 3)
+        self.clear_all_button.clicked.connect(self.limpiar_campos)
+
         left_layout.addWidget(calc_container, alignment=Qt.AlignmentFlag.AlignHCenter)
         left_layout.addStretch(1)
 
-        # Panel Derecho
+        # ================
+        # PANEL DERECHO
+        # ================
         right_frame = QFrame()
         right_frame.setStyleSheet("background-color: white;")
         right_layout = QVBoxLayout(right_frame)
         right_layout.setContentsMargins(20, 20, 20, 20)
+
+        table_title = QLabel("Tabla de Iteraciones Newton-Raphson")
+        table_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        table_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_layout.addWidget(table_title)
 
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(5)
@@ -244,12 +284,17 @@ class CalculatorPage(QWidget):
                 self.current_input = source
         return super().eventFilter(source, event)
 
+    def limpiar_campos(self):
+        # Limpia todos los campos de entrada
+        self.function_input.clear()
+        self.x0_input.clear()
+        self.tolerance_input.clear()
+
     def calcular(self):
         func_str = self.function_input.text().strip()
         x0_str = self.x0_input.text().strip()
         tol_str = self.tolerance_input.text().strip()
 
-         # Reemplazar comas por puntos en x0 y tolerancia
         x0_str = x0_str.replace(',', '.')
         tol_str = tol_str.replace(',', '.')
 
@@ -267,9 +312,9 @@ class CalculatorPage(QWidget):
         x = symbols('x')
         transformations = (standard_transformations + (implicit_multiplication_application, convert_xor))
 
-        # Reemplazos para √
-        func_str = func_str.replace('√(', 'sqrt(')   # Para casos como √(x+1)
-        func_str = func_str.replace('√x', 'sqrt(x)') # Para el caso √x
+        # Sustitución del símbolo √ por sqrt()
+        func_str = func_str.replace('√(', 'sqrt(')
+        func_str = func_str.replace('√x', 'sqrt(x)')
 
         local_dict = {
             'x': x,
