@@ -198,13 +198,13 @@ class CalculatorPage(QWidget):
             for col, text in enumerate(button_row):
                 if text:
                     button = QPushButton(text)
-                    button.setFont(QFont("Arial", 16))
+                    button.setFont(QFont("Arial", 10))
                     button.setStyleSheet(
                         "QPushButton {"
                         "  background-color: #4a2df9;"  
                         "  color: white;"               
                         "  border-radius: 10px;"         
-                        "  padding: 10px;"              
+                        "  padding: 4px;"              
                         "  font-weight: bold;"          
                         "}"
                         "QPushButton:hover {"
@@ -273,13 +273,13 @@ class CalculatorPage(QWidget):
        
        
         self.clear_all_button = QPushButton("Borrar Todo")
-        self.clear_all_button.setFont(QFont("Arial", 16))
+        self.clear_all_button.setFont(QFont("Arial", 10))
         self.clear_all_button.setStyleSheet(
             "QPushButton {"
             "  background-color: #dc3545;"  # Rojo
             "  color: white;"
             "  border-radius: 10px;"
-            "  padding: 10px;"
+            "  padding:4px;"
             "  font-weight: bold;"
             "}"
             "QPushButton:hover {"
