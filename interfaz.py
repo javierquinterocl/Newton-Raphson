@@ -29,7 +29,20 @@ from PyQt6.QtGui import QFont, QColor, QDoubleValidator
 from PyQt6.QtCore import Qt, QEvent
 
 # Importación de herramientas de Sympy para trabajar con funciones simbólicas
-from sympy import symbols, diff, lambdify, sin, cos, exp, sqrt, E, tan, log
+from sympy import (
+    symbols,                   # para crear variables simbólicas
+    diff,                      # para derivar simbólicamente
+    lambdify,                  # para convertir expresiones simbólicas a funciones numéricas
+    sin, cos, tan,             # funciones trigonométricas
+    asin, acos, atan,          # inversas: arco-sin, arco-cos, arco-tan
+    sinh, cosh, tanh,          # funciones hiperbólicas
+    exp,                       # exponencial
+    log,                       # logaritmo natural
+    sqrt,                      # raíz cuadrada
+    Abs,                       # valor absoluto
+    E,                         # constante e
+    pi,                        # constante π                       # infinito simbólico
+)
 # Se utiliza el parser avanzado de Sympy para interpretar cadenas y convertirlas en expresiones simbólicas
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application, convert_xor
 # Importación de Matplotlib para integrar gráficos en la interfaz (usando el backend para Qt)
@@ -131,8 +144,7 @@ class CalculatorPage(QWidget):
             "  color: black;"
             "}"
         )
-        # Se utiliza un validador para que solo se ingresen números
-        self.x0_input.setValidator(QDoubleValidator(-1e9, 1e9, 6))
+       
         self.x0_input.installEventFilter(self)
         aplicar_sombra(self.x0_input)
         calc_layout.addWidget(self.x0_input)
@@ -149,8 +161,7 @@ class CalculatorPage(QWidget):
             "  color: black;"
             "}"
         )
-         # Se utiliza un validador para que solo se ingresen números
-        self.tolerance_input.setValidator(QDoubleValidator(-1e9, 1e9, 6))
+      
         self.tolerance_input.installEventFilter(self)
         aplicar_sombra(self.tolerance_input)
         calc_layout.addWidget(self.tolerance_input)
@@ -400,13 +411,40 @@ class CalculatorPage(QWidget):
             QMessageBox.warning(self, "Error", "Por favor, complete todos los campos.")
             return
 
+        # Transformaciones y diccionario para Sympy
+        transformations = standard_transformations + (implicit_multiplication_application, convert_xor)
+        local_dict = {
+        'x': symbols('x'),
+        'e': E,
+        'E': E,
+        'pi': pi,
+        'sin': sin,
+        'cos': cos,
+        'tan': tan,
+        'asin': asin,
+        'acos': acos,
+        'atan': atan,
+        'sinh': sinh,
+        'cosh': cosh,
+        'tanh': tanh,
+        'exp': exp,
+        'ln': log,
+        'log': log,
+        'sqrt': sqrt,
+        'Abs': Abs,
+        }
+
         try:
-            # Conversión de las cadenas a números reales
-            x0 = float(x0_str)
-            tol = float(tol_str)
-        except ValueError:
-            QMessageBox.warning(self, "Error", "x0 y tolerancia deben ser números.")
-            return
+          # Parsear x0 y tol con Sympy para aceptar 'pi'
+         x0_expr = parse_expr(x0_str, transformations=transformations, local_dict=local_dict)
+         tol_expr = parse_expr(tol_str, transformations=transformations, local_dict=local_dict)
+         x0 = float(x0_expr.evalf())
+         tol = float(tol_expr.evalf())
+        except Exception as e:
+         QMessageBox.warning(self, "Error", f"Error en x0 o tolerancia: {e}")
+         return
+
+        
 
         # Se define la variable simbólica 'x'
         x = symbols('x')
@@ -417,17 +455,26 @@ class CalculatorPage(QWidget):
         func_str = func_str.replace('√(', 'sqrt(')
         func_str = func_str.replace('√x', 'sqrt(x)')
 
-        # Diccionario local para que el parser reconozca funciones y constantes comunes
+       # Diccionario local para que el parser reconozca funciones y constantes comunes
         local_dict = {
-            'x': x,
-            'e': E,
-            'E': E,
-            'sin': sin,
-            'cos': cos,
-            'tan': tan,
-            'ln': log,
-            'exp': exp,
-            'sqrt': sqrt
+        'x': symbols('x'),
+        'e': E,
+        'E': E,
+        'pi': pi,
+        'sin': sin,
+        'cos': cos,
+        'tan': tan,
+        'asin': asin,
+        'acos': acos,
+        'atan': atan,
+        'sinh': sinh,
+        'cosh': cosh,
+        'tanh': tanh,
+        'exp': exp,
+        'ln': log,
+        'log': log,
+        'sqrt': sqrt,
+        'Abs': Abs,
         }
 
         try:
@@ -471,7 +518,7 @@ class CalculatorPage(QWidget):
 
         # Inicio del ciclo iterativo
         i = 1
-        while error_rel_porcentaje > tol and i <= max_iter:
+        while i <= max_iter:
             try:
                 # Evaluación de la función y su derivada en el valor actual
                 fxi = f_num(xi)
@@ -485,22 +532,23 @@ class CalculatorPage(QWidget):
                 xi_new = xi - fxi / fprime_xi
 
                 # Cálculo del error relativo (en porcentaje) entre la nueva y la antigua aproximación
-                if abs(xi_new) < 1e-10:
-                    error_rel_porcentaje = abs(xi_new - xi) * 100
-                else:
-                    error_rel_porcentaje = abs((xi_new - xi) / xi_new) * 100
+                
+                raw_error = abs((xi_new - xi) / xi_new) * 100
+
+                error_rel_porcentaje = round(raw_error, 4)
+
+            
 
                 # Se evalúa la función y la derivada en la nueva aproximación
                 fxi_new = f_num(xi_new)
                 fprime_xi_new = fprime_num(xi_new)
-                # Guarda la iteración actual en la lista
-                iteraciones.append((i, xi_new, fxi_new, fprime_xi_new, error_rel_porcentaje))
-
+                 # Guarda la iteración actual
+                
                 # Si el error es menor o igual que la tolerancia, se finaliza el ciclo
-                if error_rel_porcentaje <= tol:
-                    break
-
+                if error_rel_porcentaje == tol  :
+                   break
                 # Actualiza xi para la siguiente iteración
+                iteraciones.append((i, xi_new, fxi_new, fprime_xi_new, error_rel_porcentaje))
                 xi = xi_new
                 i += 1
             except Exception as e:
